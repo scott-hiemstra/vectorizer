@@ -6,6 +6,36 @@ A high-performance FastAPI service for converting text (especially log messages)
 
 This service provides a REST API endpoint that transforms text into dense vector representations using the `all-MiniLM-L6-v2` model. It's optimized for log processing and analysis workflows where semantic similarity and clustering of text data is needed.
 
+## Purpose & Use Case
+
+This vectorizer is designed to support **log anomaly detection and similarity analysis** workflows by:
+
+🔍 **Anomaly Detection Pipeline:**
+1. **Vectorize logs** → Convert log messages into 384-dimensional embeddings
+2. **Store in Elasticsearch** → Index vectors using Elasticsearch's dense vector fields
+3. **Detect anomalies** → Use vector similarity to identify unusual log patterns
+4. **Find similar logs** → Query for logs with similar semantic meaning
+
+🎯 **Key Benefits:**
+- **Semantic Understanding**: Goes beyond keyword matching to understand log meaning
+- **Pattern Recognition**: Identifies anomalous behavior even with different wording
+- **Similarity Search**: Find related issues across different log formats
+- **Scalable Processing**: High-throughput vectorization for large log volumes
+
+📊 **Integration with Elasticsearch:**
+```json
+PUT /logs
+{
+  "mappings": {
+    "properties": {
+      "message": {"type": "text"},
+      "vector": {"type": "dense_vector", "dims": 384},
+      "timestamp": {"type": "date"}
+    }
+  }
+}
+```
+
 ## Features
 
 - ⚡ **High Performance**: ~78 RPS sustained throughput with ~129ms response times
@@ -174,10 +204,23 @@ deploy:
 ## Use Cases
 
 Perfect for:
-- 📋 **Log Analysis**: Semantic clustering of log messages
-- 🔍 **Similarity Search**: Finding similar text entries
-- 📊 **Text Classification**: Feature extraction for ML pipelines
-- 🏷️ **Content Recommendation**: Semantic matching systems
+
+### � **Anomaly Detection in Logs**
+- **Elasticsearch Integration**: Store vectors in dense_vector fields for fast similarity search
+- **Pattern Detection**: Identify unusual log patterns that deviate from normal behavior
+- **Incident Response**: Quickly find logs similar to known issues
+- **Baseline Establishment**: Create vector baselines for normal system behavior
+
+### 🔍 **Log Analysis & Operations**
+- **Semantic Clustering**: Group logs by meaning, not just keywords
+- **Cross-System Correlation**: Find related issues across different applications
+- **Error Classification**: Automatically categorize errors by semantic similarity
+- **Troubleshooting**: Search for logs with similar context or meaning
+
+### 📊 **Advanced Analytics**
+- **Feature Extraction**: Use vectors as input for downstream ML models
+- **Time-Series Analysis**: Track semantic drift in log patterns over time
+- **Root Cause Analysis**: Identify common patterns in incident logs
 
 ## Development
 
