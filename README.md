@@ -299,4 +299,3 @@ This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICE
 3. Make your changes
 4. Add tests
 5. Submit a pull request
-5. Submit a pull request
