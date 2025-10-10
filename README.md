@@ -116,6 +116,18 @@ Health check endpoint for monitoring and load balancers.
 ```
 *Returns HTTP 503 when unhealthy*
 
+### GET `/metrics`
+
+Prometheus metrics endpoint for monitoring and observability.
+
+**Response:** Prometheus-formatted metrics including:
+- `vectorizer_requests_total` - Total request count by method, endpoint, and status
+- `vectorizer_request_duration_seconds` - Request latency histogram
+- `vectorizer_encode_duration_seconds` - Time spent in model encoding
+- `vectorizer_active_requests` - Current number of active requests
+- `vectorizer_model_loaded` - Model status (1=loaded, 0=not loaded)
+- `vectorizer_text_length_chars` - Input text length distribution
+
 **Example Usage:**
 ```bash
 # Error log
@@ -130,6 +142,9 @@ curl -X POST "http://localhost:8000/vectorize" \
 
 # Health check
 curl http://localhost:8000/healthz
+
+# Prometheus metrics
+curl http://localhost:8000/metrics
 ```
 
 ## Performance
@@ -264,10 +279,32 @@ uvicorn main:app --workers 4 --host 0.0.0.0 --port 8000
 
 ### Monitoring
 
-Consider adding:
-- Health check endpoint (`/health`)
-- Metrics collection (Prometheus)
-- Request logging
+Built-in observability features:
+- ✅ **Health check endpoint** (`/healthz`) - Ready for load balancers
+- ✅ **Prometheus metrics** (`/metrics`) - Comprehensive performance monitoring
+- ✅ **Request logging** - Structured logging with uvicorn
+
+**Key Metrics to Monitor:**
+- `vectorizer_requests_total` - Request volume and error rates
+- `vectorizer_request_duration_seconds` - API latency percentiles
+- `vectorizer_encode_duration_seconds` - Model performance
+- `vectorizer_active_requests` - Concurrent load
+- `vectorizer_text_length_chars` - Input size distribution
+
+**Sample Prometheus Query:**
+```promql
+# 95th percentile latency
+histogram_quantile(0.95, rate(vectorizer_request_duration_seconds_bucket[5m]))
+
+# Error rate
+rate(vectorizer_requests_total{status!="200"}[5m]) / rate(vectorizer_requests_total[5m])
+
+# Requests per second
+rate(vectorizer_requests_total[5m])
+```
+
+**Grafana Dashboard:**
+Monitor throughput, latency, error rates, and model performance in real-time.
 - Error tracking
 
 ## Troubleshooting
