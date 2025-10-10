@@ -151,15 +151,27 @@ curl http://localhost:8000/metrics
 
 Based on load testing with Apache Bench on Intel i7-1165G7 (4 cores, 8 threads) with 32GB RAM:
 
+### **Short Text Performance (typical log messages)**
+
 | Concurrency | RPS | Avg Response Time | 95th Percentile | Test Size | Notes |
 |-------------|-----|-------------------|-----------------|-----------|-------|
-| 10          | 150 | 66ms             | 73ms            | 1,000 req | Burst performance |
-| 10          | 78  | 129ms            | 162ms           | 5,000 req | Sustained performance |
-| 15          | 77  | 194ms            | 234ms           | 5,000 req | Sustained performance |
+| 10          | 94  | 106ms            | 124ms           | 1,000 req | Optimal for short text |
 | 20          | 102 | 195ms            | 276ms           | 5,000 req | Sustained performance |
-| 50          | 152 | 329ms            | 343ms           | 1,000 req | Burst performance |
 
-**Optimal Configuration:** Concurrency level 10 for best sustained performance (~78 RPS).
+### **Long Text Performance (detailed logs, stack traces)**
+
+| Concurrency | RPS | Avg Response Time | 95th Percentile | Text Length | Notes |
+|-------------|-----|-------------------|-----------------|-------------|-------|
+| 20          | 32  | 634ms            | 930ms           | ~532 chars  | Lorem paragraph test |
+
+### **Performance Characteristics**
+
+- ⚡ **Short logs** (< 100 chars): ~90+ RPS sustained
+- 📄 **Medium logs** (100-300 chars): ~50-60 RPS estimated  
+- 📋 **Long logs** (300+ chars): ~30 RPS sustained
+- 🎯 **Optimal concurrency**: 10-20 depending on text length
+
+**Key Insight:** Performance scales non-linearly with text length. Text 13x longer results in 6x latency increase, making the service ideal for typical log processing where most messages are short.
 
 **Test Environment:**
 - CPU: Intel i7-1165G7 (Tiger Lake, 4 cores, 8 threads, 2.8-4.7 GHz)
