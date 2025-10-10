@@ -1,9 +1,13 @@
 import time
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+
+# Get CPU count for informational purposes
+cpu_cores = os.cpu_count()
 
 class LogRequest(BaseModel):
     text: str
@@ -24,7 +28,8 @@ async def lifespan(app: FastAPI):
     global model
     model = SentenceTransformer('all-MiniLM-L6-v2')
     MODEL_LOADED.set(1)
-    print("Sentence-Transformer model loaded successfully.")
+    print(f"Sentence-Transformer model loaded successfully.")
+    print(f"System has {cpu_cores} CPU cores available.")
     yield
     # Shutdown (cleanup if needed)
     MODEL_LOADED.set(0)
