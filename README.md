@@ -8,11 +8,12 @@ This service provides a REST API endpoint that transforms text into dense vector
 
 ## Features
 
-- ⚡ **High Performance**: ~150 RPS with sub-70ms response times
+- ⚡ **High Performance**: ~78 RPS sustained throughput with ~129ms response times
 - 🐳 **Docker Ready**: Containerized with Docker Compose
-- 🔄 **Auto-restart**: Production-ready with automatic container restart
-- 📊 **Consistent Latency**: 95% of requests complete within 73ms
-- 🛡️ **Reliable**: Zero failed requests in load testing
+- 🔄 **Auto-restart**: Production-ready with automatic container restart and health checks
+- 📊 **Consistent Latency**: 95% of requests complete within 162ms
+- 🛡️ **Reliable**: Zero failed requests in extensive load testing
+- 🏥 **Health Monitoring**: Built-in `/healthz` endpoint for load balancers
 
 ## Quick Start
 
@@ -20,7 +21,7 @@ This service provides a REST API endpoint that transforms text into dense vector
 
 1. **Clone and start the service:**
 ```bash
-git clone <your-repo>
+git clone https://github.com/scott-hiemstra/vectorizer.git
 cd vectorizer
 docker compose up -d
 ```
@@ -246,7 +247,7 @@ Consider adding:
 
 ## License
 
-[Your License Here]
+This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
@@ -254,4 +255,5 @@ Consider adding:
 2. Create a feature branch
 3. Make your changes
 4. Add tests
+5. Submit a pull request
 5. Submit a pull request
