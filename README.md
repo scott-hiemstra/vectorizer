@@ -104,7 +104,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ### POST `/vectorize`
 
-Converts input text into a vector embedding.
+Converts input text into a vector embedding. Text longer than 10,000 characters is silently truncated (configurable via `MAX_TEXT_LENGTH`).
 
 **Request Body:**
 ```json
@@ -117,6 +117,32 @@ Converts input text into a vector embedding.
 ```json
 {
   "vector": [0.1234, -0.5678, 0.9012, ...]
+}
+```
+
+### POST `/vectorize/batch`
+
+Encode multiple texts in a single request. Significantly faster than individual calls, especially on GPU. Maximum 64 texts per request (configurable via `MAX_BATCH_SIZE`).
+
+**Request Body:**
+```json
+{
+  "texts": [
+    "Database connection timeout after 30 seconds",
+    "User login successful",
+    "Disk usage exceeded 90% threshold"
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "vectors": [
+    [0.1234, -0.5678, ...],
+    [0.9012, 0.3456, ...],
+    [0.7890, -0.1234, ...]
+  ]
 }
 ```
 
@@ -152,6 +178,7 @@ Prometheus metrics endpoint for monitoring and observability.
 - `vectorizer_active_requests` - Current number of active requests
 - `vectorizer_model_loaded` - Model status (1=loaded, 0=not loaded)
 - `vectorizer_text_length_chars` - Input text length distribution
+- `vectorizer_texts_truncated_total` - Texts truncated to max length
 
 **Example Usage:**
 ```bash
@@ -174,12 +201,13 @@ curl http://localhost:8000/metrics
 
 ## Performance
 
-| Config | RPS | Avg Latency | p95 Latency |
-|--------|-----|-------------|-------------|
-| **CPU** (1 worker) | 82-88 | 122ms | 132ms |
-| **GPU** (GTX 1050 Ti) | 82-164 | 21ms | 33ms |
+| Config | RPS (load) | Avg Latency | p95 Latency |
+|--------|------------|-------------|-------------|
+| **CPU** (1 worker) | 67 | 49ms | 90ms |
+| **CPU** (4 workers) | 72 | 36ms | 75ms |
+| **GPU** (GTX 1050 Ti) | 76-120 | 29ms | 59ms |
 
-GPU provides **2-3x lower latency** and **2x+ throughput** at high concurrency. Full benchmark results, methodology, and load testing instructions are in [PERFORMANCE.md](PERFORMANCE.md).
+GPU provides **~1.7x lower latency** and **~1.7x more throughput** at high concurrency. Full benchmark results, methodology, and load testing instructions are in [PERFORMANCE.md](PERFORMANCE.md).
 
 ## Configuration
 
@@ -189,6 +217,9 @@ GPU provides **2-3x lower latency** and **2x+ throughput** at high concurrency. 
 |----------|---------|-------------|
 | `PORT` | 8000 | Service port |
 | `HOST` | 0.0.0.0 | Service host |
+| `MODEL_NAME` | all-MiniLM-L6-v2 | Sentence Transformers model to load |
+| `MAX_TEXT_LENGTH` | 10000 | Truncate input text beyond this many characters |
+| `MAX_BATCH_SIZE` | 64 | Maximum number of texts per batch request |
 
 ### Docker Configuration
 

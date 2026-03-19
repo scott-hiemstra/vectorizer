@@ -1,57 +1,90 @@
 # Performance
 
-Benchmark results from load testing with [k6](https://k6.io/) and [Apache Bench](https://httpd.apache.org/docs/2.4/programs/ab.html).
+Benchmark results from load testing with [k6](https://k6.io/) using mixed payload sizes (60% short, 30% medium, 10% long) with 100ms think time between requests.
 
-## CPU Performance (single worker, default)
+## k6 Results
 
-### Short Text (typical log messages, ~90 chars)
+### CPU — Single Worker (default)
 
-| Concurrency | RPS | Avg Response Time | 95th Percentile | Test Size | Notes |
-|-------------|-----|-------------------|-----------------|-----------|-------|
-| 10          | 82  | 122ms            | 132ms           | 1,000 req | Low latency |
-| 20          | 88  | 227ms            | 252ms           | 5,000 req | Sustained performance |
-| 50          | 88  | 560ms            | 636ms           | 2,000 req | RPS plateaus, latency rises |
+| Test | VUs | RPS | Avg Latency | p95 Latency | Iterations | Errors |
+|------|-----|-----|-------------|-------------|------------|--------|
+| Load | 10 | 67 | 49ms | 90ms | 3,999 | 0% |
+| Stress | 10→100 | 70 | 539ms | 1.32s | 8,458 | 0% |
 
-### Long Text (stack traces, ~670 chars)
+### CPU — 4 Workers
 
-| Concurrency | RPS | Avg Response Time | 95th Percentile | Test Size | Notes |
-|-------------|-----|-------------------|-----------------|-----------|-------|
-| 20          | 39  | 513ms            | 583ms           | 1,000 req | Realistic stack trace payload |
+| Test | VUs | RPS | Avg Latency | p95 Latency | Iterations | Errors |
+|------|-----|-----|-------------|-------------|------------|--------|
+| Load | 10 | 72 | 36ms | 75ms | 4,356 | 0% |
+| Stress | 10→100 | 98 | 386ms | 1.02s | 11,743 | 0% |
 
-### Single Request Latency
+### GPU (NVIDIA GTX 1050 Ti, 4GB VRAM)
 
-| Scenario | Latency |
-|----------|---------|
-| Warm (short text) | ~10ms |
+| Test | VUs | RPS | Avg Latency | p95 Latency | Iterations | Errors |
+|------|-----|-----|-------------|-------------|------------|--------|
+| Load | 10 | 76 | 29ms | 59ms | 4,594 | 0% |
+| Stress | 10→100 | 120 | 315ms | 791ms | 14,424 | 0% |
 
-## GPU Performance (NVIDIA GTX 1050 Ti, 4GB VRAM)
-
-| Test | VUs | RPS | Avg Latency | p95 Latency | Iterations | Notes |
-|------|-----|-----|-------------|-------------|------------|-------|
-| Load | 10 | 82 | 21ms | 33ms | 4,904 | **2.7x faster** latency vs CPU |
-| Stress | 10→100 | 164 | 230ms | 571ms | 19,653 | **2.3x more** throughput vs CPU |
-
-## CPU vs GPU Comparison
+## Comparison
 
 | Config | RPS (load) | Avg Latency (load) | RPS (stress) | Avg Latency (stress) |
 |--------|------------|--------------------|--------------|-----------------------|
-| **CPU (1 worker)** | 82 | 122ms | 88 | 560ms |
-| **GPU (GTX 1050 Ti)** | 82 | **21ms** | **164** | 230ms |
+| **CPU (1 worker)** | 67 | 49ms | 70 | 539ms |
+| **CPU (4 workers)** | 72 | 36ms | **98** | 386ms |
+| **GPU (GTX 1050 Ti)** | **76** | **29ms** | **120** | **315ms** |
 
 ## Key Insights
 
-- On CPU, RPS maxes out around 88 req/s — increasing concurrency beyond 20 only adds latency.
-- GPU provides the biggest gains under high concurrency (164 vs 88 RPS at stress) and dramatically reduces per-request latency (21ms vs 56ms avg).
-- Even a modest GPU (GTX 1050 Ti) provides meaningful acceleration for this workload.
-- Performance scales non-linearly with text length (7x longer text → ~2x slower).
+- **GPU wins across the board**: 1.7x throughput and 1.7x lower latency at stress vs single-worker CPU.
+- **Multi-worker helps under stress**: 4 workers reach 98 RPS vs 70 for single-worker (40% more), but adds ~360MB memory for 4 model copies.
+- **Single worker is fine at low concurrency**: At 10 VUs, all three configs deliver similar RPS (~67-76) — the difference is mainly latency.
+- GPU shines most at high concurrency where it keeps p95 under 800ms while CPU single-worker hits 1.3s.
+- `asyncio.to_thread()` unblocks the event loop, improving concurrent request handling across all configs.
 
 ### At a Glance
 
-- ⚡ **CPU short logs** (< 100 chars): ~82-88 RPS, ~10ms single request
-- 🚀 **GPU short logs** (< 100 chars): ~82-164 RPS, ~21ms avg under load
-- 📋 **CPU long logs** (600+ chars): ~39 RPS
-- 🎯 **CPU optimal concurrency**: 10-20 (RPS plateaus beyond ~20)
-- 📈 **GPU advantage**: 2-3x lower latency, 2x+ throughput at high concurrency
+- ⚡ **CPU (1 worker)**: 67 RPS, 49ms avg, 90ms p95
+- 🔄 **CPU (4 workers)**: 72 RPS, 36ms avg, 75ms p95
+- 🚀 **GPU (GTX 1050 Ti)**: 76 RPS load / 120 RPS stress, 29ms avg
+- 📈 **GPU advantage**: ~1.7x throughput, ~1.7x lower latency at stress
+- 🎯 **Multi-worker advantage**: 40% more throughput at stress, negligible at low concurrency
+
+## Batch Throughput (`/vectorize/batch`)
+
+Batching encodes multiple texts in a single request. On GPU, this dramatically increases total texts/second because CUDA cores process the whole batch in parallel.
+
+### CPU (single worker)
+
+| Batch Size | Requests/s | **Texts/s** | Avg Latency | p95 Latency |
+|-----------|-----------|------------|-------------|-------------|
+| 1 | 75 | 75 | 132ms | 184ms |
+| 8 | 10 | 83 | 942ms | 1.36s |
+| 16 | 4 | 64 | 2.45s | 3.23s |
+
+### GPU (GTX 1050 Ti)
+
+| Batch Size | Requests/s | **Texts/s** | Avg Latency | p95 Latency |
+|-----------|-----------|------------|-------------|-------------|
+| 1 | 121 | 121 | 82ms | 91ms |
+| 8 | 33 | **264** | 295ms | 374ms |
+| 16 | 14 | 216 | 723ms | 863ms |
+| 32 | 6 | 206 | 1.51s | 1.76s |
+| 64 | 5 | **346** | 1.79s | 2.01s |
+
+### Batch Throughput Comparison
+
+| Batch Size | CPU Texts/s | GPU Texts/s | GPU Speedup |
+|-----------|------------|------------|-------------|
+| 1 | 75 | 121 | 1.6x |
+| 8 | 83 | **264** | **3.2x** |
+| 16 | 64 | 216 | **3.4x** |
+
+**Key findings:**
+- **GPU batch=8 is the sweet spot**: 264 texts/s with sub-400ms p95 — **3.2x faster** than CPU and still responsive.
+- **CPU batching doesn't help**: Texts/s stays flat (64-83) regardless of batch size, while latency skyrockets.
+- **GPU scales with batch size**: Texts/s increases from 121 → 346 as batch grows, because CUDA cores parallelize the work.
+- **batch=64 on GPU peaks at 346 texts/s** but with ~2s latency — best for offline/bulk processing.
+- For latency-sensitive workloads, **GPU batch=8** gives the best throughput-to-latency ratio.
 
 ## Test Environment
 
@@ -96,6 +129,15 @@ k6 run --env SCENARIO=load --env BASE_URL=http://your-host:8000 k6/load-test.js
 | `stress` | 10→100 ramp | 2 min | Find throughput ceiling |
 | `spike` | 5→80→5 | ~70s | Burst recovery |
 | `soak` | 15 | 5 min | Memory leak detection |
+
+### Batch Throughput Test
+
+```bash
+# Test batch endpoint with different batch sizes
+k6 run --env BATCH_SIZE=8 k6/batch-test.js       # sweet spot for GPU
+k6 run --env BATCH_SIZE=16 k6/batch-test.js
+k6 run --env BATCH_SIZE=64 k6/batch-test.js      # max throughput (higher latency)
+```
 
 ### Apache Bench (Quick)
 
