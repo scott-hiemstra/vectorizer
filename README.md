@@ -38,10 +38,10 @@ PUT /logs
 
 ## Features
 
-- ⚡ **High Performance**: ~78 RPS sustained throughput with ~129ms response times
+- ⚡ **High Performance**: ~82 RPS sustained throughput with ~122ms response times
 - 🐳 **Docker Ready**: Containerized with Docker Compose
 - 🔄 **Auto-restart**: Production-ready with automatic container restart and health checks
-- 📊 **Consistent Latency**: 95% of requests complete within 162ms
+- 📊 **Consistent Latency**: 95% of requests complete within 132ms
 - 🛡️ **Reliable**: Zero failed requests in extensive load testing
 - 🏥 **Health Monitoring**: Built-in `/healthz` endpoint for load balancers
 
@@ -62,6 +62,31 @@ curl -X POST "http://localhost:8000/vectorize" \
      -H "Content-Type: application/json" \
      -d '{"text": "Database connection timeout - retrying"}'
 ```
+
+### GPU Deployment
+
+For GPU-accelerated inference (2-3x faster, see [Performance](#performance)):
+
+1. **Prerequisites:**
+   - NVIDIA GPU with [CUDA support](https://developer.nvidia.com/cuda-gpus)
+   - [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed
+   - Verify with: `nvidia-smi` and `docker run --rm --gpus all nvidia/cuda:12.6.3-base-ubuntu24.04 nvidia-smi`
+
+2. **Start the GPU service:**
+```bash
+docker compose -f docker-compose.gpu.yml up -d
+```
+
+3. **Verify GPU is active:**
+```bash
+curl -s http://localhost:8000/healthz | python3 -m json.tool
+# Check container logs for: "Using device: cuda"
+docker compose -f docker-compose.gpu.yml logs vectorizer-gpu | grep device
+```
+
+> **Note:** The default `Dockerfile.gpu` uses PyTorch with CUDA 12.4 (cu124), which supports
+> RTX 20xx and newer GPUs. For older GPUs (GTX 10xx / Pascal), see
+> [GPU Compatibility](#gpu-compatibility) to switch to cu118.
 
 ### Manual Setup
 
@@ -149,51 +174,12 @@ curl http://localhost:8000/metrics
 
 ## Performance
 
-Based on load testing with Apache Bench on Intel i7-1165G7 (4 cores, 8 threads) with 32GB RAM:
+| Config | RPS | Avg Latency | p95 Latency |
+|--------|-----|-------------|-------------|
+| **CPU** (1 worker) | 82-88 | 122ms | 132ms |
+| **GPU** (GTX 1050 Ti) | 82-164 | 21ms | 33ms |
 
-### **Short Text Performance (typical log messages)**
-
-| Concurrency | RPS | Avg Response Time | 95th Percentile | Test Size | Notes |
-|-------------|-----|-------------------|-----------------|-----------|-------|
-| 10          | 94  | 106ms            | 124ms           | 1,000 req | Optimal for short text |
-| 20          | 102 | 195ms            | 276ms           | 5,000 req | Sustained performance |
-
-### **Long Text Performance (detailed logs, stack traces)**
-
-| Concurrency | RPS | Avg Response Time | 95th Percentile | Text Length | Notes |
-|-------------|-----|-------------------|-----------------|-------------|-------|
-| 20          | 32  | 634ms            | 930ms           | ~532 chars  | Lorem paragraph test |
-
-### **Performance Characteristics**
-
-- ⚡ **Short logs** (< 100 chars): ~90+ RPS sustained
-- 📄 **Medium logs** (100-300 chars): ~50-60 RPS estimated  
-- 📋 **Long logs** (300+ chars): ~30 RPS sustained
-- 🎯 **Optimal concurrency**: 10-20 depending on text length
-
-**Key Insight:** Performance scales non-linearly with text length. Text 13x longer results in 6x latency increase, making the service ideal for typical log processing where most messages are short.
-
-**Test Environment:**
-- CPU: Intel i7-1165G7 (Tiger Lake, 4 cores, 8 threads, 2.8-4.7 GHz)
-- RAM: 32GB
-- Platform: Linux (Docker containerized)
-
-### Load Testing
-
-Test the service performance:
-
-```bash
-# Install Apache Bench
-sudo apt-get install apache2-utils
-
-# Run load test
-ab -n 1000 -c 10 -p payload.json -T application/json http://localhost:8000/vectorize
-```
-
-Sample `payload.json`:
-```json
-{"text": "2024-10-10 14:32:15 ERROR Database connection timeout after 30 seconds"}
-```
+GPU provides **2-3x lower latency** and **2x+ throughput** at high concurrency. Full benchmark results, methodology, and load testing instructions are in [PERFORMANCE.md](PERFORMANCE.md).
 
 ## Configuration
 
@@ -280,14 +266,47 @@ print(f'Vector length: {len(response.json()[\"vector\"])}')
 
 For higher throughput:
 
-1. **Multiple Workers:**
+1. **GPU Acceleration** (recommended — see [GPU Deployment](#gpu-deployment)):
+   - 2-3x lower latency, 2x+ throughput at high concurrency
+   - Even modest GPUs (GTX 1050 Ti) provide meaningful gains
+
+2. **Load Balancer:** Use nginx or similar for distributing requests across multiple instances
+
+3. **Multiple Workers** (CPU only — not recommended for most cases):
 ```bash
 uvicorn main:app --workers 4 --host 0.0.0.0 --port 8000
 ```
+> ⚠️ Each worker loads its own copy of the model (~90MB each). At low-to-moderate
+> concurrency, multi-worker adds overhead without throughput gains. Prefer GPU or
+> horizontal scaling with separate containers behind a load balancer.
 
-2. **Load Balancer:** Use nginx or similar for distributing requests
+### GPU Compatibility
 
-3. **GPU Acceleration:** Modify to use CUDA if GPUs available
+The GPU Docker image uses PyTorch with a specific CUDA toolkit version. The default
+(`cu124`) supports RTX 20xx and newer. For older GPUs, switch to `cu118`.
+
+| GPU Family | Architecture | Compute Capability | CUDA | PyTorch Index URL |
+|------------|-------------|-------------------|------|-------------------|
+| RTX 40xx (4070, 4090, etc.) | Ada Lovelace | sm_89 | **cu124** (default) | `https://download.pytorch.org/whl/cu124` |
+| RTX 30xx (3060, 3090, etc.) | Ampere | sm_86 | **cu124** (default) | `https://download.pytorch.org/whl/cu124` |
+| RTX 20xx (2070, 2080, etc.) | Turing | sm_75 | **cu124** (default) | `https://download.pytorch.org/whl/cu124` |
+| A100, H100 (data center) | Ampere/Hopper | sm_80 / sm_90 | **cu124** (default) | `https://download.pytorch.org/whl/cu124` |
+| GTX 10xx (1050 Ti, 1080, etc.) | Pascal | sm_61 | cu118 | `https://download.pytorch.org/whl/cu118` |
+
+**For older GPUs (Pascal / GTX 10xx)**, edit `Dockerfile.gpu`:
+
+```dockerfile
+# Change base image:
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
+
+# Change PyTorch index:
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu118
+```
+
+**How to check your GPU's compute capability:**
+```bash
+nvidia-smi --query-gpu=name,compute_cap --format=csv
+```
 
 ### Monitoring
 

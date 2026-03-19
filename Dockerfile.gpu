@@ -1,0 +1,30 @@
+# GPU-enabled image using NVIDIA CUDA base
+FROM nvidia/cuda:12.4.1-runtime-ubuntu24.04
+
+# Install Python
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory
+WORKDIR /app
+
+# Copy requirements and install dependencies with CUDA-enabled PyTorch
+COPY requirements.txt .
+
+# Install PyTorch with CUDA support, then the rest of the requirements
+# Default: cu124 — supports RTX 20xx (Turing), 30xx (Ampere), 40xx (Ada Lovelace), A100, H100
+# For older GPUs (GTX 10xx / Pascal / sm_61), use cu118 instead:
+#   torch --index-url https://download.pytorch.org/whl/cu118
+RUN pip install --no-cache-dir --break-system-packages \
+    torch --index-url https://download.pytorch.org/whl/cu124 && \
+    pip install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Copy the application code
+COPY . .
+
+# Expose the port
+EXPOSE 8000
+
+# Start the application
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
